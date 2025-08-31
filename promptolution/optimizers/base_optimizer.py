@@ -70,11 +70,16 @@ class BaseOptimizer(ABC):
         # validate config
         if self.config is not None:
             self.config.validate()
+
+        logger.info("Pre optimzation")
         self._pre_optimization_loop()
 
-        for _ in range(n_steps):
+        for i in range(n_steps):
+            logger.info("Starting optimization step %d", i)
             try:
+                print("HERE 1")
                 self.prompts = self._step()
+                print("HERE 2")
             except Exception as e:
                 # exit training loop and gracefully fail
                 logger.error(f"⛔ Error during optimization step: {e}")

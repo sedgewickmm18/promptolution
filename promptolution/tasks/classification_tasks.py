@@ -9,6 +9,10 @@ from typing import TYPE_CHECKING, Any, Callable, List, Literal, Tuple, Union
 
 from promptolution.tasks.base_task import BaseTask
 
+from promptolution.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 if TYPE_CHECKING:
     from promptolution.predictors.base_predictor import BasePredictor
     from promptolution.utils.config import ExperimentConfig
@@ -161,11 +165,14 @@ class ClassificationTask(BaseTask):
         This method orchestrates subsampling, prediction, caching, and result collection.
         """
         prompts = [prompts] if isinstance(prompts, str) else prompts
+
         eval_strategy = eval_strategy or self.eval_strategy
 
         xs, ys = self.subsample(eval_strategy=eval_strategy)
         batches = self._prepare_batch(prompts, xs, ys, eval_strategy)
         prompts_to_evaluate, xs_to_evaluate, ys_to_evaluate = zip(*batches) if batches else ([], [], [])
+
+        logger.info("evaluate %d prompts for %d sample input elements", len(prompts_to_evaluate), len(xs_to_evaluate))
 
         preds = predictor.predict(
             prompts=prompts_to_evaluate,

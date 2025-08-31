@@ -53,6 +53,8 @@ class FirstOccurrenceClassifier(BasePredictor):
         Args:
             preds: The raw predictions from the language model.
         """
+        logger.info("_extract_preds. Classify %d prompt results", len(preds))
+
         response = []
         for pred in preds:
             predicted_class = self.classes[0]  # use first class as default pred
@@ -65,6 +67,9 @@ class FirstOccurrenceClassifier(BasePredictor):
             response.append(predicted_class)
 
         response = np.array(response)
+
+        logger.info("_extract_preds. Exit")
+
         return response
 
 
