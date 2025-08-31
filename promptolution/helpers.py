@@ -1,5 +1,6 @@
 """Helper functions for the usage of the libary."""
 
+optimizer = None
 
 from typing import TYPE_CHECKING, Callable, List, Literal
 
@@ -41,6 +42,74 @@ from promptolution.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+#
+# separate experiment setup from running it
+#
+class Experiment:
+def __init__(
+        self,
+        description: str = None,
+        current_llm: BaseLLM,
+        current_predictor: BasePredictor,
+        current_task: BaseTask,
+        current_optimizer: BaseOptimizer,
+        current_config: ExperimentConfig,
+        test_df: pd.DataFrame
+    ):
+    self.description = description
+    self.current_llm = current_llm
+    self.current_predictor = current_predictor
+    self.current_task = current_task
+    self.current_optimizer = current_optimizer
+    self.current_config = current_config
+    self.test_df = test_df
+
+
+def setup_experiment(df: pd.DataFrame, config: "ExperimentConfig"):
+    """Setup a full experiment based on the provided configuration.
+
+    Args:
+        df (pd.DataFrame): Input DataFrame containing the data.
+        config (Config): Configuration object for the experiment.
+
+    Returns:
+        (llm, predictor, task and optimizer objects along with test_df) to optimize and evaluate results.
+    """
+
+    # train test split
+    train_df = df.sample(frac=0.8, random_state=42)
+    test_df = df.drop(train_df.index)
+
+    llm = get_llm(config=config)
+    predictor = get_predictor(llm, config=config)
+
+    config.task_description = config.task_description + " " + predictor.extraction_description
+    if config.optimizer == "capo" and (config.eval_strategy is None or "block" not in config.eval_strategy):
+        logger.warning("📌 CAPO requires block evaluation strategy. Setting it to 'sequential_block'.")
+        config.eval_strategy = "sequential_block"
+
+    task = get_task(train_df, config)
+    optimizer = get_optimizer(
+        predictor=predictor,
+        meta_llm=llm,
+        task=task,
+        config=config,
+    )
+    return Experiment("default setup", llm, predictor, task, optimizer, config, test_df)
+
+
+def run_experiment_job(experiment):
+    """Run a full experiment based on a previous prepared experiment
+
+    logger.warning("🔥 Starting optimization...")
+    prompts = optimizer.optimize(n_steps=experiment.current_config.n_steps)
+
+    if hasattr(config, "prepend_exemplars") and config.prepend_exemplars:
+        selector = get_exemplar_selector(experiment.current_config.exemplar_selector, experiment.current_task, experiment.current_predictor)
+        prompts = [selector.select_exemplars(p, n_examples=experiment.current_config.n_exemplars) for p in prompts]
+
+    return run_evaluation(experiment.current_test_df, experiment.current_config, prompts)
+
 
 def run_experiment(df: pd.DataFrame, config: "ExperimentConfig"):
     """Run a full experiment based on the provided configuration.
@@ -52,6 +121,7 @@ def run_experiment(df: pd.DataFrame, config: "ExperimentConfig"):
     Returns:
         pd.DataFrame: A DataFrame containing the prompts and their scores.
     """
+
     # train test split
     train_df = df.sample(frac=0.8, random_state=42)
     test_df = df.drop(train_df.index)
@@ -70,6 +140,7 @@ def run_optimization(df: pd.DataFrame, config: "ExperimentConfig") -> List[str]:
     Returns:
         List[str]: The optimized list of prompts.
     """
+
     llm = get_llm(config=config)
     predictor = get_predictor(llm, config=config)
 

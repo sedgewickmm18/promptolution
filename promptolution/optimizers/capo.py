@@ -168,6 +168,7 @@ class CAPO(BaseOptimizer):
             few_shots = self._create_few_shot_examples(instruction_text, num_examples)
             population.append(CAPOPrompt(instruction_text, few_shots))
 
+        logger.info("Created population with size " + str(len(population)))
         return population
 
     def _create_few_shot_examples(self, instruction: str, num_examples: int) -> List[Tuple[str, str]]:
@@ -202,6 +203,7 @@ class CAPO(BaseOptimizer):
             if preds[j] == sample_targets[j] or not self.check_fs_accuracy:
                 few_shots[j] = CAPO_FEWSHOT_TEMPLATE.replace("<input>", sample_inputs[j]).replace("<output>", seqs[j])
 
+        logger.info("Created %d shot examples", len(few_shots))
         return few_shots
 
     def _crossover(self, parents: List[CAPOPrompt]) -> List[CAPOPrompt]:
@@ -236,6 +238,7 @@ class CAPO(BaseOptimizer):
             instruction = extract_from_tag(instruction, "<prompt>", "</prompt>")
             offsprings.append(CAPOPrompt(instruction, examples))
 
+        logger.info("Created %d offspring prompts", len(offsprings))
         return offsprings
 
     def _mutate(self, offsprings: List[CAPOPrompt]) -> List[CAPOPrompt]:
@@ -269,6 +272,7 @@ class CAPO(BaseOptimizer):
             random.shuffle(new_few_shots)
             mutated.append(CAPOPrompt(new_instruction, new_few_shots))
 
+        logger.info("Created %d mutated prompts", len(mutated))
         return mutated
 
     def _do_racing(self, candidates: List[CAPOPrompt], k: int) -> List[CAPOPrompt]:
@@ -281,11 +285,17 @@ class CAPO(BaseOptimizer):
         Returns:
             List[Prompt]: List of surviving prompts after racing.
         """
+        init_len_cand = len(candidates)
+        logger.info("_do_racing, start with %d candidates", init_len_cand)
+
         self.task.reset_block_idx()
         block_scores = []
         i = 0
         while len(candidates) > k and i < self.max_n_blocks_eval:
             # new_scores shape: (n_candidates, n_samples)
+
+            logger.info("task evaluate %d candidates", init_len_cand)
+
             new_scores = self.task.evaluate(
                 [c.construct_prompt() for c in candidates], self.predictor, return_agg_scores=False
             )
@@ -320,6 +330,7 @@ class CAPO(BaseOptimizer):
         candidates = [candidates[i] for i in order]
         self.scores = avg_scores[order]
 
+        logger.info("Eliminated %d candidates, left with %d", init_len_cand - len(candidates), len(candidates))
         return candidates
 
     def _pre_optimization_loop(self):
@@ -338,7 +349,10 @@ class CAPO(BaseOptimizer):
         mutated = self._mutate(offsprings)
         combined = self.prompt_objects + mutated
 
+        logger.info("Single optimization step with %d candidate prompts", len(combined))
+
         self.prompt_objects = self._do_racing(combined, self.population_size)
         self.prompts = [p.construct_prompt() for p in self.prompt_objects]
 
+        logger.info("Single optimization step - go with %d prompts", len(self.prompts))
         return self.prompts
