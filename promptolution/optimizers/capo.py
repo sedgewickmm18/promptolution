@@ -175,6 +175,8 @@ class CAPO(BaseOptimizer):
         if num_examples == 0:
             return []
 
+        num_examples = min(num_examples, len(self.df_few_shots))
+
         few_shot_samples = self.df_few_shots.sample(num_examples, replace=False)
         sample_inputs = few_shot_samples[self.task.x_column].values
         sample_targets = few_shot_samples[self.task.y_column].values

@@ -9,10 +9,6 @@ from typing import TYPE_CHECKING, Callable, List, Literal
 
 from promptolution.tasks.base_task import BaseTask
 
-from promptolution.utils.logging import get_logger
-
-logger = get_logger(__name__)
-
 if TYPE_CHECKING:
     from promptolution.predictors.base_predictor import BasePredictor
     from promptolution.utils.config import ExperimentConfig
