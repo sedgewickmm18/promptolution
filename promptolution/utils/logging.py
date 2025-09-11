@@ -4,6 +4,7 @@ import logging
 
 from typing import Optional
 
+fileHandle = None
 
 def get_logger(name: str, level: Optional[int] = None) -> logging.Logger:
     """Get a logger with the specified name and level.
@@ -39,3 +40,17 @@ def setup_logging(level: int = logging.INFO) -> None:
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+
+def prepare_file_log(path: str = "/tmp/promptolution.log") -> None:
+    global fileHandle
+    if fileHandle is not None:
+        fileHandle.close()
+    fileHandle = logging.FileHandler(path, mode='a')
+
+def append_log(msg: str = "") -> None:
+    """ Very simple file appender to keep track of prompts and results
+    """
+    global fileHandle
+    if fileHandle is None: prepare_file_log()
+    record = logging.LogRecord("", 5, "", 0, msg, dict(), None)
+    fileHandle.emit(record)

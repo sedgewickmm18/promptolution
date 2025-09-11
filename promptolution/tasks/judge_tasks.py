@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, List, Literal, Optional
 from promptolution.llms.base_llm import BaseLLM
 from promptolution.tasks.base_task import BaseTask
 from promptolution.utils.formatting import extract_from_tag
-from promptolution.utils.logging import get_logger
+from promptolution.utils.logging import get_logger, append_log
 
 if TYPE_CHECKING:  # pragma: no cover
     from promptolution.utils.config import ExperimentConfig
@@ -110,13 +110,20 @@ class JudgeTask(BaseTask):
     def _evaluate(self, xs: np.ndarray, ys: np.ndarray, preds: np.ndarray) -> List[float]:
         """Calculate the score for a single prediction using the LLM judge."""
         prompts: List[str] = []
+
+        #if hasattr(self, "logfile") and self.logfile:
+
+        append_log("_evaluate: input_prompts")
         for x, y, pred in zip(xs, ys, preds):
             judge_prompt = self._construct_judge_prompt(x, pred, y)
             prompts.append(judge_prompt)
+            append_log("_evaluate prompt:" + judge_prompt)
         judge_responses = self.judge_llm.get_response(prompts)
         scores_str = extract_from_tag(judge_responses, "<final_score>", "</final_score>")
         scores = []
         for score in scores_str:
+            append_log("_evaluate: got back response: " + score)
+            _score = score
             try:
                 # only numeric chars, - or . are allowed
                 score = "".join(filter(lambda c: c.isdigit() or c in "-.", score))
@@ -125,7 +132,7 @@ class JudgeTask(BaseTask):
                 score = (score + self.min_score) / (self.max_score - self.min_score)
                 score = max(0.0, min(1.0, score))
             except ValueError:
-                logger.warning(f"Failed to parse score '{score}' as float. Defaulting to 0.0.")
+                logger.warning(f"Failed to parse score '{_score}' as float. Defaulting to 0.0.")
                 score = 0.0
 
             scores.append(score)
