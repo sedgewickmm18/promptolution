@@ -7,8 +7,9 @@ from typing import TYPE_CHECKING, List, Optional
 
 from promptolution.optimizers.base_optimizer import BaseOptimizer
 from promptolution.optimizers.templates import OPRO_TEMPLATE
+from promptolution.utils.formatting import extract_from_tag
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from promptolution.llms.base_llm import BaseLLM
     from promptolution.predictors.base_predictor import BasePredictor
     from promptolution.tasks.base_task import BaseTask
@@ -119,7 +120,7 @@ class OPRO(BaseOptimizer):
 
             response = self.meta_llm.get_response([self.meta_prompt])[0]
 
-            prompt = response.split("<prompt>")[-1].split("</prompt>")[0].strip()
+            prompt = extract_from_tag(response, "<prompt>", "</prompt>")
 
             if prompt in self.prompts:
                 duplicate_prompts += 1

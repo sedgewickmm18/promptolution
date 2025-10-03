@@ -1,16 +1,17 @@
 """Helper functions for the usage of the libary."""
 
-optimizer = None
 
-from typing import TYPE_CHECKING, List, Literal
+from typing import TYPE_CHECKING, Callable, List, Literal
 
+from promptolution.tasks.judge_tasks import JudgeTask
+from promptolution.tasks.reward_tasks import RewardTask
 if TYPE_CHECKING:
     from promptolution.exemplar_selectors.base_exemplar_selector import BaseExemplarSelector
-    from promptolution.llms.base_llm import BaseLLM
-    from promptolution.optimizers.base_optimizer import BaseOptimizer
-    from promptolution.predictors.base_predictor import BasePredictor
-    from promptolution.tasks.base_task import BaseTask
-    from promptolution.utils.config import ExperimentConfig
+from promptolution.llms.base_llm import BaseLLM
+from promptolution.optimizers.base_optimizer import BaseOptimizer
+from promptolution.predictors.base_predictor import BasePredictor
+from promptolution.tasks.base_task import BaseTask
+from promptolution.utils.config import ExperimentConfig
 
 import pandas as pd
 
@@ -43,23 +44,25 @@ logger = get_logger(__name__)
 # separate experiment setup from running it
 #
 class Experiment:
-def __init__(
+    def __init__(
         self,
         description: str = None,
-        current_llm: BaseLLM,
-        current_predictor: BasePredictor,
-        current_task: BaseTask,
-        current_optimizer: BaseOptimizer,
-        current_config: ExperimentConfig,
-        test_df: pd.DataFrame
+        current_llm: BaseLLM = None,
+        current_predictor: BasePredictor = None,
+        current_task: BaseTask = None,
+        current_optimizer: BaseOptimizer = None,
+        current_config: ExperimentConfig = None,
+        train_df: pd.DataFrame = None,
+        test_df: pd.DataFrame = None
     ):
-    self.description = description
-    self.current_llm = current_llm
-    self.current_predictor = current_predictor
-    self.current_task = current_task
-    self.current_optimizer = current_optimizer
-    self.current_config = current_config
-    self.test_df = test_df
+        self.description = description
+        self.current_llm = current_llm
+        self.current_predictor = current_predictor
+        self.current_task = current_task
+        self.current_optimizer = current_optimizer
+        self.current_config = current_config
+        self.train_df = train_df
+        self.test_df = test_df
 
 
 def setup_experiment(df: pd.DataFrame, config: "ExperimentConfig"):
@@ -85,23 +88,24 @@ def setup_experiment(df: pd.DataFrame, config: "ExperimentConfig"):
         logger.warning("📌 CAPO requires block evaluation strategy. Setting it to 'sequential_block'.")
         config.eval_strategy = "sequential_block"
 
-    task = get_task(train_df, config)
+    task = get_task(df, config, judge_llm=llm)
     optimizer = get_optimizer(
         predictor=predictor,
         meta_llm=llm,
         task=task,
         config=config,
     )
-    return Experiment("default setup", llm, predictor, task, optimizer, config, test_df)
+    return Experiment("default setup", llm, predictor, task, optimizer, config, train_df, test_df)
 
 
 def run_experiment_job(experiment):
     """Run a full experiment based on a previous prepared experiment
+    """
 
     logger.warning("🔥 Starting optimization...")
-    prompts = optimizer.optimize(n_steps=experiment.current_config.n_steps)
+    prompts = experiment.current_optimizer.optimize(n_steps=experiment.current_config.n_steps)
 
-    if hasattr(config, "prepend_exemplars") and config.prepend_exemplars:
+    if hasattr(experiment.current_config, "prepend_exemplars") and experiment.current_config.prepend_exemplars:
         selector = get_exemplar_selector(experiment.current_config.exemplar_selector, experiment.current_task, experiment.current_predictor)
         prompts = [selector.select_exemplars(p, n_examples=experiment.current_config.n_exemplars) for p in prompts]
 
@@ -146,7 +150,7 @@ def run_optimization(df: pd.DataFrame, config: "ExperimentConfig") -> List[str]:
         logger.warning("📌 CAPO requires block evaluation strategy. Setting it to 'sequential_block'.")
         config.eval_strategy = "sequential_block"
 
-    task = get_task(df, config)
+    task = get_task(df, config, judge_llm=llm)
     optimizer = get_optimizer(
         predictor=predictor,
         meta_llm=llm,
@@ -174,8 +178,8 @@ def run_evaluation(df: pd.DataFrame, config: "ExperimentConfig", prompts: List[s
     Returns:
         pd.DataFrame: A DataFrame containing the prompts and their scores.
     """
-    task = get_task(df, config)
     llm = get_llm(config=config)
+    task = get_task(df, config, judge_llm=llm)
     predictor = get_predictor(llm, config=config)
     logger.warning("📊 Starting evaluation...")
     scores = task.evaluate(prompts, predictor, eval_strategy="full")
@@ -215,7 +219,13 @@ def get_llm(model_id: str = None, config: "ExperimentConfig" = None) -> "BaseLLM
     return APILLM(model_id=model_id, config=config)
 
 
-def get_task(df: pd.DataFrame, config: "ExperimentConfig") -> "BaseTask":
+def get_task(
+    df: pd.DataFrame,
+    config: "ExperimentConfig",
+    task_type: Literal["classification", "reward", "judge"] = None,
+    judge_llm: "BaseLLM" = None,
+    reward_function: Callable = None,
+) -> "BaseTask":
     """Get the task based on the provided DataFrame and configuration.
 
     So far only ClassificationTask is supported.
@@ -227,6 +237,18 @@ def get_task(df: pd.DataFrame, config: "ExperimentConfig") -> "BaseTask":
     Returns:
         BaseTask: An instance of a task class based on the provided DataFrame and configuration.
     """
+    if task_type is None:
+        task_type = config.task_type
+
+    if task_type == "reward":
+        return RewardTask(
+            df=df,
+            reward_function=reward_function,
+            config=config,
+        )
+    elif task_type == "judge":
+        return JudgeTask(df, judge_llm=judge_llm, config=config)
+
     return ClassificationTask(df, config=config)
 
 
@@ -351,9 +373,11 @@ def get_predictor(
     Returns:
         An instance of FirstOccurrenceClassifier or MarkerBasedClassifier.
     """
+
     if type == "first_occurrence":
         return FirstOccurrenceClassifier(downstream_llm, *args, **kwargs)
     elif type == "marker":
         return MarkerBasedClassifier(downstream_llm, *args, **kwargs)
     else:
         raise ValueError(f"Invalid predictor type: '{type}'")
+

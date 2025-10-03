@@ -8,7 +8,9 @@ import pandas as pd
 
 from typing import TYPE_CHECKING, Callable, List, Tuple
 
-if TYPE_CHECKING:
+from promptolution.utils.formatting import extract_from_tag
+
+if TYPE_CHECKING:  # pragma: no cover
     from promptolution.llms.base_llm import BaseLLM
     from promptolution.predictors.base_predictor import BasePredictor
     from promptolution.tasks.base_task import BaseTask
@@ -83,6 +85,8 @@ class CAPO(BaseOptimizer):
         test_statistic: "TestStatistics" = "paired_t_test",
         alpha: float = 0.2,
         length_penalty: float = 0.05,
+        check_fs_accuracy: bool = True,
+        create_fs_reasoning: bool = True,
         df_few_shots: pd.DataFrame = None,
         crossover_template: str = None,
         mutation_template: str = None,
@@ -103,6 +107,10 @@ class CAPO(BaseOptimizer):
             test_statistic (TestStatistics): Statistical test to compare prompt performance. Default is "paired_t_test".
             alpha (float): Significance level for the statistical test.
             length_penalty (float): Penalty factor for prompt length.
+            check_fs_accuracy (bool): Whether to check the accuracy of few-shot examples before appending them to the prompt.
+                In cases such as reward tasks, this can be set to False, as no ground truth is available. Default is True.
+            create_fs_reasoning (bool): Whether to create reasoning for few-shot examples using the downstream model,
+                instead of simply using input-output pairs from the few shots DataFrame. Default is True.
             df_few_shots (pd.DataFrame): DataFrame containing few-shot examples. If None, will pop 10% of datapoints from task.
             crossover_template (str, optional): Template for crossover instructions.
             mutation_template (str, optional): Template for mutation instructions.
@@ -123,6 +131,9 @@ class CAPO(BaseOptimizer):
 
         self.length_penalty = length_penalty
         self.token_counter = get_token_counter(self.downstream_llm)
+
+        self.check_fs_accuracy = check_fs_accuracy
+        self.create_fs_reasoning = create_fs_reasoning
 
         self.scores = np.empty(0)
         super().__init__(predictor, task, initial_prompts, callbacks, config)
@@ -164,6 +175,8 @@ class CAPO(BaseOptimizer):
         if num_examples == 0:
             return []
 
+        num_examples = min(num_examples, len(self.df_few_shots))
+
         few_shot_samples = self.df_few_shots.sample(num_examples, replace=False)
         sample_inputs = few_shot_samples[self.task.x_column].values
         sample_targets = few_shot_samples[self.task.y_column].values
@@ -173,7 +186,11 @@ class CAPO(BaseOptimizer):
             )
             for i, t in zip(sample_inputs, sample_targets)
         ]
-        # Select partition of the examples to generate reasoning from downstream model
+
+        if not self.create_fs_reasoning:
+            # If we do not create reasoning, return the few-shot examples directly
+            return few_shots
+
         preds, seqs = self.predictor.predict(
             [instruction] * num_examples,
             sample_inputs,
@@ -185,7 +202,7 @@ class CAPO(BaseOptimizer):
             # Process and clean up the generated sequences
             seqs[j] = seqs[j].replace(sample_inputs[j], "").strip()
             # Check if the prediction is correct and add reasoning if so
-            if preds[j] == sample_targets[j]:
+            if preds[j] == sample_targets[j] or not self.check_fs_accuracy:
                 few_shots[j] = CAPO_FEWSHOT_TEMPLATE.replace("<input>", sample_inputs[j]).replace("<output>", seqs[j])
 
         logger.info("Created %d shot examples", len(few_shots))
@@ -220,7 +237,7 @@ class CAPO(BaseOptimizer):
 
         offsprings = []
         for instruction, examples in zip(child_instructions, offspring_few_shots):
-            instruction = instruction.split("<prompt>")[-1].split("</prompt>")[0].strip()
+            instruction = extract_from_tag(instruction, "<prompt>", "</prompt>")
             offsprings.append(CAPOPrompt(instruction, examples))
 
         logger.info("Created %d offspring prompts", len(offsprings))
@@ -243,7 +260,7 @@ class CAPO(BaseOptimizer):
 
         mutated = []
         for new_instruction, prompt in zip(new_instructions, offsprings):
-            new_instruction = new_instruction.split("<prompt>")[-1].split("</prompt>")[0].strip()
+            new_instruction = extract_from_tag(new_instruction, "<prompt>", "</prompt>")
             p = random.random()
 
             if p < 1 / 3 and len(prompt.few_shots) < self.upper_shots:  # add a random few shot

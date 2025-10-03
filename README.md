@@ -1,5 +1,6 @@
 ![promptolution](https://github.com/user-attachments/assets/84c050bd-61a1-4f2e-bc4e-874d9b4a69af)
 
+
 ![Coverage](https://img.shields.io/badge/Coverage-89%25-green)
 [![CI](https://github.com/finitearth/promptolution/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/finitearth/promptolution/actions/workflows/ci.yml)
 [![Docs](https://github.com/finitearth/promptolution/actions/workflows/docs.yml/badge.svg?branch=main)](https://github.com/finitearth/promptolution/actions/workflows/docs.yml)
@@ -36,7 +37,7 @@ to install the necessary dependencies. You might need to install [pipx](https://
 
 ## Usage
 
-To get started right away, take a look at our [getting started notebook](https://github.com/finitearth/promptolution/blob/main/notebooks/getting_started.ipynb).
+To get started right away, take a look at our [getting started notebook](https://github.com/finitearth/promptolution/blob/main/tutorials/getting_started.ipynb) and our [other demos and tutorials](https://github.com/finitearth/promptolution/blob/main/tutorials).
 For more details, a comprehensive **documentation** with API reference is availabe at https://finitearth.github.io/promptolution/.
 
 ### Featured Optimizers

@@ -7,13 +7,14 @@ from typing import TYPE_CHECKING, List
 
 from promptolution.optimizers.base_optimizer import BaseOptimizer
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from promptolution.llms.base_llm import BaseLLM
     from promptolution.predictors.base_predictor import BasePredictor
     from promptolution.tasks.base_task import BaseTask
     from promptolution.utils.callbacks import BaseCallback
     from promptolution.utils.config import ExperimentConfig
 
+from promptolution.utils.formatting import extract_from_tag
 from promptolution.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -64,6 +65,9 @@ class EvoPromptGA(BaseOptimizer):
         assert self.selection_mode in ["random", "wheel", "tour"], "Invalid selection mode."
 
     def _pre_optimization_loop(self):
+
+        logger.info("evopromptga _pre_optimize: evaluate %d prompts", len(self.prompts))
+
         self.scores = self.task.evaluate(self.prompts, self.predictor, return_agg_scores=True).tolist()
         # sort prompts by score
         self.prompts = [prompt for _, prompt in sorted(zip(self.scores, self.prompts), reverse=True)]
@@ -73,6 +77,7 @@ class EvoPromptGA(BaseOptimizer):
         new_prompts = self._crossover(self.prompts, self.scores)
         prompts = self.prompts + new_prompts
 
+        logger.info("evopromptga _step: evaluate %d new prompts", len(new_prompts))
         new_scores = self.task.evaluate(new_prompts, self.predictor, return_agg_scores=True).tolist()
 
         scores = self.scores + new_scores
@@ -126,6 +131,6 @@ class EvoPromptGA(BaseOptimizer):
             meta_prompts.append(meta_prompt)
 
         child_prompts = self.meta_llm.get_response(meta_prompts)
-        child_prompts = [prompt.split("<prompt>")[-1].split("</prompt>")[0].strip() for prompt in child_prompts]
+        child_prompts = extract_from_tag(child_prompts, "<prompt>", "</prompt>")
 
         return child_prompts

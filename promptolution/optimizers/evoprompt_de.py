@@ -6,8 +6,9 @@ import numpy as np
 from typing import TYPE_CHECKING, List
 
 from promptolution.optimizers.base_optimizer import BaseOptimizer
+from promptolution.utils.formatting import extract_from_tag
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from promptolution.llms.base_llm import BaseLLM
     from promptolution.predictors.base_predictor import BasePredictor
     from promptolution.tasks.base_task import BaseTask
@@ -94,7 +95,7 @@ class EvoPromptDE(BaseOptimizer):
             meta_prompts.append(meta_prompt)
 
         child_prompts = self.meta_llm.get_response(meta_prompts)
-        child_prompts = [prompt.split("<prompt>")[-1].split("</prompt>")[0].strip() for prompt in child_prompts]
+        child_prompts = extract_from_tag(child_prompts, "<prompt>", "</prompt>")
 
         child_scores = self.task.evaluate(child_prompts, self.predictor, return_agg_scores=True)
 

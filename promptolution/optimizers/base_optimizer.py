@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 
 from typing import TYPE_CHECKING, Callable, List
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from promptolution.tasks.base_task import BaseTask
     from promptolution.utils.config import ExperimentConfig
 
@@ -77,9 +77,7 @@ class BaseOptimizer(ABC):
         for i in range(n_steps):
             logger.info("Starting optimization step %d", i)
             try:
-                print("HERE 1")
                 self.prompts = self._step()
-                print("HERE 2")
             except Exception as e:
                 # exit training loop and gracefully fail
                 logger.error(f"⛔ Error during optimization step: {e}")
